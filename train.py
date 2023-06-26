@@ -81,6 +81,7 @@ def main(config: DictConfig):
     disable_dropout(policy)
     
     if config.lora.enabled:
+        print('adding LORA')
         lora_config = LoraConfig(
             r=config.lora.lora_r,
             lora_alpha=config.lora.lora_alpha,
