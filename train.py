@@ -13,6 +13,7 @@ import wandb
 import json
 import socket
 from typing import Optional, Set
+from peft import LoraConfig, get_peft_model
 
 
 OmegaConf.register_new_resolver("get_local_run_dir", lambda exp_name, local_dirs: get_local_run_dir(exp_name, local_dirs))
@@ -78,6 +79,18 @@ def main(config: DictConfig):
     policy = transformers.AutoModelForCausalLM.from_pretrained(
         config.model.name_or_path, cache_dir=get_local_dir(config.local_dirs), low_cpu_mem_usage=True, torch_dtype=policy_dtype, **model_kwargs)
     disable_dropout(policy)
+    
+    if config.lora:
+        lora_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+            target_modules = ["c_proj", "c_attn", "q_attn"]
+        )
+
+        policy = get_peft_model(policy, lora_config)
 
     if config.loss.name == 'dpo':
         print('building reference model')
