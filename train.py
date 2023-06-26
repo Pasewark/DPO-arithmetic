@@ -18,6 +18,15 @@ from peft import LoraConfig, get_peft_model
 
 OmegaConf.register_new_resolver("get_local_run_dir", lambda exp_name, local_dirs: get_local_run_dir(exp_name, local_dirs))
 
+# to save memory when using reference model and adapters
+class ModelWithDisabledAdapter:
+    def __init__(self, model):
+        self.model = model
+
+    def __call__(self, inputs):
+        with self.model.disable_adapter():
+            return self.model(inputs)
+
 
 def worker_main(rank: int, world_size: int, config: DictConfig, policy: nn.Module, reference_model: Optional[nn.Module] = None):
     """Main function for each worker process (may be only 1 for BasicTrainer/TensorParallelTrainer)."""
@@ -85,7 +94,7 @@ def main(config: DictConfig):
         lora_config = LoraConfig(
             r=config.lora.lora_r,
             lora_alpha=config.lora.lora_alpha,
-            lora_dropout=config.lora.lora_dropout,
+            lora_dropout=0.0,
             bias="none",
             task_type="CAUSAL_LM",
             target_modules = ["c_proj", "c_attn", "q_attn"]
@@ -95,10 +104,13 @@ def main(config: DictConfig):
 
     if config.loss.name == 'dpo':
         print('building reference model')
-        reference_model_dtype = getattr(torch, config.model.reference_dtype)
-        reference_model = transformers.AutoModelForCausalLM.from_pretrained(
-            config.model.name_or_path, cache_dir=get_local_dir(config.local_dirs), low_cpu_mem_usage=True, torch_dtype=reference_model_dtype, **model_kwargs)
-        disable_dropout(reference_model)
+        if config.lora.enabled:
+            reference_model = ModelWithDisabledAdapter(policy)
+        else:
+            reference_model_dtype = getattr(torch, config.model.reference_dtype)
+            reference_model = transformers.AutoModelForCausalLM.from_pretrained(
+                config.model.name_or_path, cache_dir=get_local_dir(config.local_dirs), low_cpu_mem_usage=True, torch_dtype=reference_model_dtype, **model_kwargs)
+            disable_dropout(reference_model)
     else:
         reference_model = None
 
