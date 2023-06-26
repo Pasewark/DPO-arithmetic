@@ -9,6 +9,7 @@ import random
 from bs4 import BeautifulSoup, NavigableString
 import numpy as np
 from typing import Dict, List, Optional, Iterator, Callable, Union, Tuple
+import pickle
 
 
 def extract_anthropic_prompt(prompt_and_response):
@@ -158,6 +159,40 @@ def get_hh(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str,
         data[prompt]['sft_target'] = chosen
 
     return data
+  
+def get_arithmetic_sft(silent=False, num_examples=20000):
+    print(f'Loading sft arithmetic dataset from Huggingface...')
+    dataset = datasets.load_dataset("tiedong/goat",split='train')
+    print('done')
+    dataset=dataset.shuffle()
+    data = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(tqdm.tqdm(dataset, desc='Processing sft arithmetic', disable=silent)):
+        if i >= num_examples:
+            break
+        prompt = row['instruction']+'\nAnswer: '
+        data[prompt]['sft_target'] = row['output']
+        
+    assert len(data)<=num_examples
+    return data
+  
+
+def get_arithmetic_dpo(silent=False):
+    print(f'Loading dpo arithmetic dataset...')
+    with open('galactica_outputs_dpo0.pkl', 'rb') as f:
+        prompt_dict=pickle.load(f)
+    print('done')
+    data = defaultdict(lambda: defaultdict(list))
+    for key, value in prompt_dict.items():
+        prompt=key+'\nAnswer: '
+        chosen=value[0][0].split('\nAnswer: ')[1]
+        rejected=value[1][0].split('\nAnswer: ')[1]
+        responses = [chosen, rejected]
+        n_responses = len(data[prompt]['responses'])
+        data[prompt]['pairs'].append((n_responses, n_responses + 1))
+        data[prompt]['responses'].extend(responses)
+        data[prompt]['sft_target'] = chosen
+        
+    return data
 
 
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
@@ -168,11 +203,15 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_hh(split, silent=silent, cache_dir=cache_dir)
     elif name == 'se':
         data = get_se(split, silent=silent, cache_dir=cache_dir)
+    elif name == 'arithmetic_sft':
+        data = get_arithmetic_sft()
+    elif name == 'arithmetic_dpo':
+        data = get_arithmetic_dpo()
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
-    assert set(list(data.values())[0].keys()) == {'responses', 'pairs', 'sft_target'}, \
-        f"Unexpected keys in dataset: {list(list(data.values())[0].keys())}"
+    if not set(list(data.values())[0].keys()) == {'responses', 'pairs', 'sft_target'}:
+        print(f"Warning Unexpected keys in dataset: {list(list(data.values())[0].keys())}")
 
     return data
 
@@ -214,6 +253,9 @@ def tokenize_batch_element(prompt: str, chosen: str, rejected: str, truncation_m
          the sum of the length of the prompt and the chosen/rejected response, with -100 for the
          prompt tokens.
     """
+    #print('prompt',prompt)
+    #print('chosen',chosen)
+    #print('rejected',rejected)
     chosen_tokens = tokenizer(chosen, add_special_tokens=False)
     rejected_tokens = tokenizer(rejected, add_special_tokens=False)
     prompt_tokens = tokenizer(prompt, add_special_tokens=False)
@@ -332,10 +374,12 @@ def get_batch_iterator(names: List[str],
                 break
             if sft_mode:
                 batch_element = tokenize_batch_element(prompt, sft_target, sft_target, truncation_mode, tokenizer, max_length, max_prompt_length)
+                #print('batch_element before',batch_element)
                 batch_element = {k: v for k, v in batch_element.items() if 'rejected' not in k}
                 batch.append(batch_element)
                 example_idx += 1
                 if len(batch) == batch_size:
+                    #print('batch',batch)
                     yield collate_fn(batch)
                     if n_examples is not None and example_idx >= n_examples:
                         if not silent:

@@ -16,7 +16,7 @@ from torch.distributed.fsdp import (
 )
 from torch.distributed.fsdp.api import FullStateDictConfig, FullOptimStateDictConfig
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-import tensor_parallel as tp
+#import tensor_parallel as tp
 
 from preference_datasets import get_batch_iterator
 from utils import (
@@ -148,6 +148,9 @@ class BasicTrainer(object):
         tokenizer_name_or_path = config.model.tokenizer_name_or_path or config.model.name_or_path
         rank0_print(f'Loading tokenizer {tokenizer_name_or_path}')
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_name_or_path, cache_dir=get_local_dir(config.local_dirs))
+        if self.tokenizer.eos_token_id is None: # for galactica model
+            special_tokens_dict = {'eos_token': '</s>','pad_token': '<pad>'}
+            self.tokenizer.add_special_tokens(special_tokens_dict)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
 
@@ -486,26 +489,26 @@ class FSDPTrainer(BasicTrainer):
         dist.barrier()
         
 
-class TensorParallelTrainer(BasicTrainer):
-    def __init__(self, policy, config, seed, run_dir, reference_model=None, rank=0, world_size=1):
-        """A trainer subclass that uses TensorParallel to shard the model across multiple GPUs.
-
-           Based on https://github.com/BlackSamorez/tensor_parallel. Note sampling is extremely slow,
-              see https://github.com/BlackSamorez/tensor_parallel/issues/66.
-        """
-        super().__init__(policy, config, seed, run_dir, reference_model, rank, world_size)
-        
-        rank0_print('Sharding policy...')
-        self.policy = tp.tensor_parallel(policy, sharded=True)
-        if config.loss.name == 'dpo':
-            rank0_print('Sharding reference model...')
-            self.reference_model = tp.tensor_parallel(reference_model, sharded=False)
-
-    def save(self, output_dir=None, metrics=None):
-        """Save (unsharded) policy state to disk."""
-        with tp.save_tensor_parallel(self.policy):
-            policy_state_dict = self.policy.state_dict()
-    
-        self.write_state_dict(self.example_counter, policy_state_dict, metrics, 'policy.pt', output_dir)
-        del policy_state_dict
+#class TensorParallelTrainer(BasicTrainer):
+#    def __init__(self, policy, config, seed, run_dir, reference_model=None, rank=0, world_size=1):
+#        """A trainer subclass that uses TensorParallel to shard the model across multiple GPUs.
+#
+#           Based on https://github.com/BlackSamorez/tensor_parallel. Note sampling is extremely slow,
+#              see https://github.com/BlackSamorez/tensor_parallel/issues/66.
+#        """
+#        super().__init__(policy, config, seed, run_dir, reference_model, rank, world_size)
+#        
+#        rank0_print('Sharding policy...')
+#        self.policy = tp.tensor_parallel(policy, sharded=True)
+#        if config.loss.name == 'dpo':
+#            rank0_print('Sharding reference model...')
+#            self.reference_model = tp.tensor_parallel(reference_model, sharded=False)
+#
+#    def save(self, output_dir=None, metrics=None):
+#        """Save (unsharded) policy state to disk."""
+#        with tp.save_tensor_parallel(self.policy):
+#            policy_state_dict = self.policy.state_dict()
+#    
+#        self.write_state_dict(self.example_counter, policy_state_dict, metrics, 'policy.pt', output_dir)
+#        del policy_state_dict
         
