@@ -80,11 +80,11 @@ def main(config: DictConfig):
         config.model.name_or_path, cache_dir=get_local_dir(config.local_dirs), low_cpu_mem_usage=True, torch_dtype=policy_dtype, **model_kwargs)
     disable_dropout(policy)
     
-    if config.lora:
+    if config.lora.enabled:
         lora_config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            lora_dropout=.05,
+            r=config.lora.lora_r,
+            lora_alpha=config.lora.lora_alpha,
+            lora_dropout=config.lora.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
             target_modules = ["c_proj", "c_attn", "q_attn"]
