@@ -92,3 +92,9 @@ defaults:
 - _self_
 - model: blank_model_fp32 # basic model configuration
 - loss: sft # which loss function, either sft or dpo (specify loss.beta if using dpo)
+
+lora:
+  enabled: false
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: .05
