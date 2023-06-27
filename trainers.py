@@ -254,6 +254,12 @@ class BasicTrainer(object):
         rank0_print(f'Using {self.config.optimizer} optimizer')
         self.optimizer = getattr(torch.optim, self.config.optimizer)(self.policy.parameters(), lr=self.config.lr)
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda step: min(1.0, (step + 1) / (self.config.warmup_steps + 1)))
+
+        if self.config.model.archive is not None:
+            opt_state_dict = torch.load(self.config.model.archive+'/optimizer.pt', map_location='cpu')
+            self.optimizer.load_state_dict(opt_state_dict['state'])
+            sch_state_dict = torch.load(self.config.model.archive+'/scheduler.pt', map_location='cpu')
+            self.scheduler.load_state_dict(sch_state_dict['state'])
     
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
