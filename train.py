@@ -13,7 +13,7 @@ import wandb
 import json
 import socket
 from typing import Optional, Set
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model, PeftModel, PeftConfig
 
 
 OmegaConf.register_new_resolver("get_local_run_dir", lambda exp_name, local_dirs: get_local_run_dir(exp_name, local_dirs))
@@ -90,14 +90,20 @@ def main(config: DictConfig):
     disable_dropout(policy)
     
     if config.lora.enabled:
-        print('adding LORA')
+        print('-------------------adding LORA')
+        target_modules= [
+            "q_proj",
+            "v_proj",
+            "k_proj",
+            "o_proj",
+        ]
         lora_config = LoraConfig(
             r=config.lora.lora_r,
             lora_alpha=config.lora.lora_alpha,
-            lora_dropout=0.0,
+            lora_dropout=config.lora.lora_dropout,
             bias="none",
             task_type="CAUSAL_LM",
-            target_modules = ["c_proj", "c_attn", "q_attn"]
+            target_modules = target_modules
         )
 
         policy = get_peft_model(policy, lora_config)
@@ -115,12 +121,20 @@ def main(config: DictConfig):
         reference_model = None
 
     if config.model.archive is not None:
-        state_dict = torch.load(config.model.archive, map_location='cpu')
+        state_dict = torch.load(config.model.archive+'/policy.pt', map_location='cpu')
         step, metrics = state_dict['step_idx'], state_dict['metrics']
-        print(f'loading pre-trained weights at step {step} from {config.model.archive} with metrics {json.dumps(metrics, indent=2)}')
-        policy.load_state_dict(state_dict['state'])
-        if config.loss.name == 'dpo':
-            reference_model.load_state_dict(state_dict['state'])
+        print(f'loading pre-trained weights at step {step} from {config.model.archive}/policy.pt with metrics {json.dumps(metrics, indent=2)}')
+        if config.lora.enabled:
+            policy = transformers.AutoModelForCausalLM.from_pretrained(
+                config.model.name_or_path, cache_dir=get_local_dir(config.local_dirs), low_cpu_mem_usage=True, torch_dtype=policy_dtype, **model_kwargs)
+            disable_dropout(policy)
+            policy = PeftModel.from_pretrained(policy, config.model.archive, is_trainable=True)
+            if config.loss.name == 'dpo':
+                reference_model = ModelWithDisabledAdapter(policy)
+        else:
+            policy.load_state_dict(state_dict['state'])
+            if config.loss.name == 'dpo':
+                reference_model.load_state_dict(state_dict['state'])
         print('loaded pre-trained weights')
     
     if 'FSDP' in config.trainer:
