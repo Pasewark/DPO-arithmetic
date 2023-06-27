@@ -72,7 +72,7 @@ max_prompt_length: 256
 n_epochs: 1
 
 # the number of examples to train for; if null, must specify n_epochs
-n_examples: 200000
+n_examples: 500000
 
 # the number of examples to evaluate on (and sample from, if sample_during_eval is true)
 n_eval_examples: 256
