@@ -160,7 +160,7 @@ def get_hh(split: str, silent: bool = False, cache_dir: str = None) -> Dict[str,
 
     return data
   
-def get_arithmetic_sft(silent=False, num_examples=20000):
+def get_arithmetic_sft(silent=False, num_examples=500000):
     print(f'Loading sft arithmetic dataset from Huggingface...')
     dataset = datasets.load_dataset("tiedong/goat",split='train')
     print('done')
