@@ -218,6 +218,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_arithmetic_sft()
     elif name == 'arithmetic_dpo':
         data = get_arithmetic_dpo()
+    elif name == 'noisy_arithmetic_sft':
+        data = get_noisy_arithmetic_sft()
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
