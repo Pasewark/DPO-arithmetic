@@ -174,7 +174,18 @@ def get_arithmetic_sft(silent=False, num_examples=500000):
         
     assert len(data)<=num_examples
     return data
-  
+
+def get_noisy_arithmetic_sft(silent=False):
+    print(f'Loading sft arithmetic dataset from Huggingface...')
+    dataset = dataset = load_dataset("eric-math123/instruct_addition",split='train')
+    print('done')
+    dataset=dataset.shuffle()
+    data = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(tqdm.tqdm(dataset, desc='Processing noisy sft arithmetic', disable=silent)):
+        prompt = row['instruction']+'\nAnswer: '
+        data[prompt]['sft_target'] = row['output']
+        
+    return data
 
 def get_arithmetic_dpo(silent=False):
     print(f'Loading dpo arithmetic dataset...')
