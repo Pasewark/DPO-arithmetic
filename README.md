@@ -5,7 +5,7 @@
 This is a fork from https://github.com/eric-mitchell/direct-preference-optimization. This repo adds support for Lora and also improves the capability to resume training from a checkpoint. It also adds support for the arithmetic dataset from the GOAT paper and an additional addition dataset I made.
 
 To run supervised for example, you can do this command: 
-python -u train.py model=llama7b datasets=[noisy_arithmetic_sft] loss=sft exp_name=testing gradient_accumulation_steps=32 batch_size=128 eval_batch_size=64 sample_during_eval=false
+    python -u train.py model=llama7b datasets=[noisy_arithmetic_sft] loss=sft exp_name=testing gradient_accumulation_steps=32 batch_size=128 eval_batch_size=64 sample_during_eval=false
 
 The rest of this readme is just from the original implementation:
 
