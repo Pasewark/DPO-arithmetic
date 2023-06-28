@@ -2,9 +2,9 @@
 
 ## What is this repo?
 
-This repo includes a reference implementation of the DPO algorithm for training language models from preference data, as described in the paper [Direct Preference Optimization: Your Language Model is Secretly a Reward Model](https://arxiv.org/abs/2305.18290).
+This is a fork from https://github.com/eric-mitchell/direct-preference-optimization. This repo adds support for Lora and also improves the capability to resume training from a checkpoint.
 
-The code here supports any causal HuggingFace model- look at our examples in `config/model` to add your own. Adding your own datasets is also easy. See [the README section](https://github.com/huggingface/peft) on adding datasets.
+The rest of this readme is just from the original implementation:
 
 The DPO pipeline has two stages:
 
