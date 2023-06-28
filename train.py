@@ -23,9 +23,33 @@ class ModelWithDisabledAdapter:
     def __init__(self, model):
         self.model = model
 
-    def __call__(self, inputs):
-        with self.model.disable_adapter():
-            return self.model(inputs)
+    def __getattribute__(self, name):
+        model = super().__getattribute__('model')
+
+        attr = getattr(model, name)
+
+        if callable(attr):
+            def newfunc(*args, **kwargs):
+                was_training = model.training  # Check if the model was in training mode
+                model.eval()
+                with model.disable_adapter():
+                    result = attr(*args, **kwargs)
+                if was_training:  # If the model was in training mode, switch back to it
+                    model.train()  
+                return result
+            return newfunc
+        else:
+            return attr
+
+    def __call__(self, *args, **kwargs):
+        model = super().__getattribute__('model')
+        was_training = model.training  # Check if the model was in training mode
+        model.eval()  # Set model in evaluation mode
+        with model.disable_adapter():
+            result = model(*args, **kwargs)
+        if was_training:  # If the model was in training mode, switch back to it
+            model.train()  
+        return result
 
 
 def worker_main(rank: int, world_size: int, config: DictConfig, policy: nn.Module, reference_model: Optional[nn.Module] = None):
