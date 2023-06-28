@@ -7,6 +7,7 @@ lora:
   lora_r: 64
   lora_alpha: 64
   lora_dropout: .05
+  lora_dir: ./lora_weights
 
 # name for this experiment in the local run directory and on wandb
 exp_name: ???
