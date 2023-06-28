@@ -2,7 +2,7 @@
 
 ## What is this repo?
 
-This is a fork from https://github.com/eric-mitchell/direct-preference-optimization. This repo adds support for LORA and also improves the capability to resume training from a checkpoint. A nice thing to note when using LORA with DPO loss is that we can simply make the reference model equal to the sft model with disabled adapters. This saves a bit of memory. It also adds support for the arithmetic dataset from the GOAT paper and an additional addition dataset I made.
+This is a fork from https://github.com/eric-mitchell/direct-preference-optimization. This repo adds support for LORA and also improves the capability to resume training from a checkpoint. A nice thing to note when using LORA with DPO loss is that we can simply make the reference model equal to the sft model with disabled adapters. This saves a bit of memory. This repo also adds support for the arithmetic dataset from the GOAT paper and an additional addition dataset I made.
 
 To run supervised fine-tuning for example, you can do this command:
 
