@@ -7,7 +7,6 @@ lora:
   lora_r: 64
   lora_alpha: 64
   lora_dropout: .05
-  lora_dir: ./lora_weights
 
 # name for this experiment in the local run directory and on wandb
 exp_name: ???
@@ -64,13 +63,13 @@ gradient_accumulation_steps: 1
 max_grad_norm: 10.0
 
 # the maximum allowed length for an input (prompt + response)
-max_length: 512
+max_length: 2048
 
 # the maximum allowed length for a prompt
 max_prompt_length: 256
 
 # the number of epochs to train for; if null, must specify n_examples
-n_epochs: 1
+n_epochs: 5
 
 # the number of examples to train for; if null, must specify n_epochs
 n_examples: 500000
@@ -91,7 +90,7 @@ warmup_steps: 5
 activation_checkpointing: false
 
 # evaluate and save model every eval_every steps
-eval_every: 6400
+eval_every: 2284
 
 # prevent wandb from logging more than once per minimum_log_interval_secs
 minimum_log_interval_secs: 1.0
@@ -100,5 +99,4 @@ defaults:
 - _self_
 - model: blank_model_fp32 # basic model configuration
 - loss: sft # which loss function, either sft or dpo (specify loss.beta if using dpo)
-
 
