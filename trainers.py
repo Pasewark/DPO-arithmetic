@@ -265,7 +265,8 @@ class BasicTrainer(object):
         np.random.seed(self.seed)
         random.seed(self.seed)
 
-        if self.config.loss.name == 'dpo':
+        # reference model is set to eval by default if lora enabled
+        if self.config.loss.name == 'dpo' and not self.config.lora.enabled:
             self.reference_model.eval()
 
         self.example_counter = 0
