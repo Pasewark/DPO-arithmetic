@@ -205,6 +205,24 @@ def get_arithmetic_dpo(silent=False):
         
     return data
 
+def get_noisy_arithmetic_dpo(silent=False):
+    print(f'Loading dpo arithmetic dataset...')
+    with open('llama89600_outputs_dpo0.pkl', 'rb') as f:
+        prompt_dict=pickle.load(f)
+    print('done')
+    data = defaultdict(lambda: defaultdict(list))
+    for key, value in prompt_dict.items():
+        prompt=key+'\nAnswer:  '
+        chosen=value[0][0].split('\nAnswer: ')[1]
+        rejected=value[1][0].split('\nAnswer: ')[1]
+        responses = [chosen, rejected]
+        n_responses = len(data[prompt]['responses'])
+        data[prompt]['pairs'].append((n_responses, n_responses + 1))
+        data[prompt]['responses'].extend(responses)
+        data[prompt]['sft_target'] = chosen
+        
+    return data
+
 
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
     """Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'."""
@@ -220,6 +238,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_arithmetic_dpo()
     elif name == 'noisy_arithmetic_sft':
         data = get_noisy_arithmetic_sft()
+    elif name == 'noisy_arithmetic_dpo':
+        data = get_noisy_arithmetic_dpo()
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
