@@ -7,3 +7,5 @@ beta: ???
 
 # if true, use a uniform (maximum entropy) reference model
 reference_free: false
+
+is_online: false
