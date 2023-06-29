@@ -212,7 +212,7 @@ def get_noisy_arithmetic_dpo(silent=False):
     print('done')
     data = defaultdict(lambda: defaultdict(list))
     for key, value in prompt_dict.items():
-        prompt=key+'\nAnswer:  '
+        prompt=key+'\nAnswer: '
         chosen=value[0][0].split('\nAnswer: ')[1]
         rejected=value[1][0].split('\nAnswer: ')[1]
         responses = [chosen, rejected]
@@ -400,6 +400,77 @@ def get_batch_iterator(names: List[str],
         if shuffle:
             with TemporarilySeededRandom(next(permutation_seeds)):
                 random.shuffle(flat_data)
+
+        batch = []
+        for prompt, responses, pairs, sft_target, truncation_mode in flat_data:
+            if done:
+                break
+            if sft_mode:
+                batch_element = tokenize_batch_element(prompt, sft_target, sft_target, truncation_mode, tokenizer, max_length, max_prompt_length)
+                #print('batch_element before',batch_element)
+                batch_element = {k: v for k, v in batch_element.items() if 'rejected' not in k}
+                batch.append(batch_element)
+                example_idx += 1
+                if len(batch) == batch_size:
+                    #print('batch',batch)
+                    yield collate_fn(batch)
+                    if n_examples is not None and example_idx >= n_examples:
+                        if not silent:
+                            print(f'Finished generating {n_examples} examples on {split} split')
+                        done = True
+
+                    batch = []
+            else:
+                for p in pairs:
+                    if done:
+                        break
+                    batch_element = tokenize_batch_element(prompt, responses[p[0]], responses[p[1]], truncation_mode, tokenizer, max_length, max_prompt_length)
+                    batch.append(batch_element)
+                    example_idx += 1
+                    if len(batch) == batch_size:
+                        yield collate_fn(batch)
+                        if n_examples is not None and example_idx >= n_examples:
+                            if not silent:
+                                print(f'FINISHED {n_examples} EXAMPLES on {split} split')
+                            done = True
+                        batch = []
+        if done:
+            break
+
+        epoch_idx += 1
+
+# does same as above, but takes data as argument rather than fetching with function
+def get_batch_iterator_dataset(dataset,
+                       tokenizer,
+                       split: str = 'train',
+                       batch_size: int = 1,
+                       shuffle: bool = False,
+                       max_length: int = 512,
+                       max_prompt_length: int = 128,
+                       sft_mode: bool = False,
+                       n_epochs: Optional[int] = None,
+                       n_examples: Optional[int] = None,
+                       seed:int = 0,
+                       silent: bool = True,
+                       cache_dir: Optional[str] = None) -> Iterator[Dict]:
+
+    assert n_epochs is not None or n_examples is not None, "Must specify either n_epochs or n_examples"
+
+    flat_data = []
+    truncation_mode = 'keep_start'
+    for prompt, data in dataset.items():
+        flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
+
+    collate_fn = get_collate_fn(tokenizer)
+
+    epoch_idx = 0
+    example_idx = 0
+    done = False
+    while True:
+        if n_epochs is not None and epoch_idx >= n_epochs:
+            if not silent:
+                print(f'Finished generating {n_epochs} epochs on {split} split')
+            break
 
         batch = []
         for prompt, responses, pairs, sft_target, truncation_mode in flat_data:
