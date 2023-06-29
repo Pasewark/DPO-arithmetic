@@ -18,7 +18,7 @@ from torch.distributed.fsdp.api import FullStateDictConfig, FullOptimStateDictCo
 from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 #import tensor_parallel as tp
 
-from preference_datasets import get_batch_iterator
+from preference_datasets import get_batch_iterator, get_batch_iterator_dataset
 from utils import (
     slice_and_move_batch_for_device,
     formatted_dict,
@@ -40,6 +40,59 @@ import json
 import functools
 from typing import Optional, Dict, List, Union, Tuple
 
+def is_sol(output):
+    return output[0].split('=')[-1]==output[1]
+
+def generate_new_dict(old_dict, boolean_func):
+    new_dict = {}
+    for key, values in old_dict.items():
+        true_values = [value for value in values if boolean_func(value)]
+        false_values = [value for value in values if not boolean_func(value)]
+        
+        if true_values and false_values:
+            new_dict[key] = [true_values[0], false_values[0]]
+    return new_dict
+
+# for each prompt in batch_init, generate 4 outputs from model
+# if there is one good and one bad output, add this prompt and the outputs to return
+# once there are at least batch_size examples to return, return the batch
+def get_online_batch(model, tokenizer, initial_batch):
+    repeat_num=4
+    batch_prompt_tokens=initial_batch['prompt_input_ids']
+    batch_attention_mask=initial_batch['prompt_attention_mask']
+    prompt_tokens=batch_prompt_tokens.repeat_interleave(repeat_num,dim=0)
+    attention_mask=batch_attention_mask.repeat_interleave(repeat_num,dim=0)
+    tokenized_samples = model.generate(
+        input_ids=prompt_tokens, 
+        attention_mask=attention_mask, 
+        max_length=2048, 
+        do_sample=True, 
+        temperature=.9, 
+        pad_token_id=tokenizer.pad_token_id
+    )
+    samples=tokenizer.batch_decode(tokenized_samples,skip_special_tokens=True)
+    solutions=[item.split('=')[-1] for item in initial_batch['chosen_response_only'] for _ in range(repeat_num)]
+    samples_with_solutions=[list(pair) for pair in zip(samples, solutions)]
+    prompt_dict=defaultdict(list)
+    for sample in samples_with_solutions:
+        prompt_dict[sample[0].split('\nAnswer: ')[0]].append(sample)
+    new_prompt_dict=generate_new_dict(prompt_dict, is_sol)
+    if len(new_prompt_dict)==0:
+        return False
+    data = defaultdict(lambda: defaultdict(list))
+    for key, value in new_prompt_dict.items():
+        prompt=key+'\nAnswer: '
+        chosen=value[0][0].split('\nAnswer: ')[1]
+        rejected=value[1][0].split('\nAnswer: ')[1]
+        responses = [chosen, rejected]
+        n_responses = len(data[prompt]['responses'])
+        data[prompt]['pairs'].append((n_responses, n_responses + 1))
+        data[prompt]['responses'].extend(responses)
+        data[prompt]['sft_target'] = chosen
+        
+    batch_it=get_batch_iterator_dataset(data, tokenizer,batch_size=min(len(data),batch_prompt_tokens.shape[0]), max_length=2048,max_prompt_length=512,n_examples=len(data))
+    batch_list = list(batch_it)
+    return batch_list[0]
 
 def dpo_loss(policy_chosen_logps: torch.FloatTensor,
              policy_rejected_logps: torch.FloatTensor,
@@ -160,7 +213,7 @@ class BasicTrainer(object):
             shuffle=True,
             max_length=config.max_length,
             max_prompt_length=config.max_prompt_length,
-            sft_mode=config.loss.name == 'sft',
+            sft_mode=config.loss.name == 'sft' or config.loss.is_online,
         )
 
         self.policy = policy
@@ -214,6 +267,10 @@ class BasicTrainer(object):
         train_test = 'train' if train else 'eval'
 
         if loss_config.name == 'dpo':
+            if loss_config.is_online:
+                batch=get_online_batch(self.policy, self.tokenizer, batch)
+                if not batch: return .69, metrics
+                
             policy_chosen_logps, policy_rejected_logps = self.concatenated_forward(self.policy, batch)
             with torch.no_grad():
                 reference_chosen_logps, reference_rejected_logps = self.concatenated_forward(self.reference_model, batch)
@@ -346,6 +403,7 @@ class BasicTrainer(object):
                 global_microbatch = slice_and_move_batch_for_device(batch, microbatch_idx, self.config.gradient_accumulation_steps, self.rank)
                 local_microbatch = slice_and_move_batch_for_device(global_microbatch, self.rank, self.world_size, self.rank)
                 loss, metrics = self.get_batch_metrics(local_microbatch, self.config.loss, train=True)
+                if len(metrics)==0:continue
                 (loss / self.config.gradient_accumulation_steps).backward()
 
                 for k, v in metrics.items():
