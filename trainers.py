@@ -56,7 +56,7 @@ def generate_new_dict(old_dict, boolean_func):
 # for each prompt in batch_init, generate 4 outputs from model
 # if there is one good and one bad output, add this prompt and the outputs to return
 # once there are at least batch_size examples to return, return the batch
-def get_online_batch(model, tokenizer, initial_batch):
+def get_online_batch(model, tokenizer, initial_batch, temp):
     repeat_num=4
     batch_prompt_tokens=initial_batch['prompt_input_ids']
     batch_attention_mask=initial_batch['prompt_attention_mask']
@@ -67,7 +67,7 @@ def get_online_batch(model, tokenizer, initial_batch):
         attention_mask=attention_mask, 
         max_length=2048, 
         do_sample=True, 
-        temperature=.9, 
+        temperature=temp, 
         pad_token_id=tokenizer.pad_token_id
     )
     samples=tokenizer.batch_decode(tokenized_samples,skip_special_tokens=True)
@@ -268,7 +268,7 @@ class BasicTrainer(object):
 
         if loss_config.name == 'dpo':
             if loss_config.is_online:
-                batch=get_online_batch(self.policy, self.tokenizer, batch)
+                batch=get_online_batch(self.policy, self.tokenizer, batch, loss_config.temp)
                 if not batch: return .69, metrics
                 
             policy_chosen_logps, policy_rejected_logps = self.concatenated_forward(self.policy, batch)
@@ -431,6 +431,10 @@ class BasicTrainer(object):
                 mean_train_metrics['counters/examples'] = self.example_counter
                 mean_train_metrics['counters/updates'] = self.batch_counter
                 rank0_print(f'train stats after {self.example_counter} examples: {formatted_dict(mean_train_metrics)}')
+                if self.config.loss.adjust_temp:
+                    if mean_train_metrics['example_proportion']<.7:
+                        self.config.loss.temp+=.1
+                        print(f'Changing temp to {self.config.loss.temp}')
 
                 if self.config.wandb.enabled and self.rank == 0:
                     wandb.log(mean_train_metrics, step=self.example_counter)
