@@ -9,3 +9,7 @@ beta: ???
 reference_free: false
 
 is_online: false
+
+temp: .9
+
+adjust_temp: true
