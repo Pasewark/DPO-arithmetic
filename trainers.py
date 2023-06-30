@@ -403,7 +403,11 @@ class BasicTrainer(object):
                 global_microbatch = slice_and_move_batch_for_device(batch, microbatch_idx, self.config.gradient_accumulation_steps, self.rank)
                 local_microbatch = slice_and_move_batch_for_device(global_microbatch, self.rank, self.world_size, self.rank)
                 loss, metrics = self.get_batch_metrics(local_microbatch, self.config.loss, train=True)
-                if len(metrics)==0:continue
+                if len(metrics)==0:
+                    batch_metrics['example_proportion'].append(0)
+                    continue
+                else:
+                    batch_metrics['example_proportion'].append(1)
                 (loss / self.config.gradient_accumulation_steps).backward()
 
                 for k, v in metrics.items():
