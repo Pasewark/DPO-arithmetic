@@ -51,12 +51,12 @@ def generate_new_dict(old_dict, boolean_func):
         
         if true_values and false_values:
             new_dict[key] = [true_values[0], false_values[0]]
-    return new_dict
+    return new_dict, len(true_values)/(len(true_values)+len(false_values))
 
 # for each prompt in batch_init, generate 4 outputs from model
 # if there is one good and one bad output, add this prompt and the outputs to return
 # once there are at least batch_size examples to return, return the batch
-def get_online_batch(model, tokenizer, initial_batch, temp):
+def get_online_batch(model, tokenizer, initial_batch, temp, max_length=1024):
     repeat_num=4
     batch_prompt_tokens=initial_batch['prompt_input_ids']
     batch_attention_mask=initial_batch['prompt_attention_mask']
@@ -65,7 +65,7 @@ def get_online_batch(model, tokenizer, initial_batch, temp):
     tokenized_samples = model.generate(
         input_ids=prompt_tokens, 
         attention_mask=attention_mask, 
-        max_length=2048, 
+        max_length=max_length, 
         do_sample=True, 
         temperature=temp, 
         pad_token_id=tokenizer.pad_token_id
@@ -76,9 +76,10 @@ def get_online_batch(model, tokenizer, initial_batch, temp):
     prompt_dict=defaultdict(list)
     for sample in samples_with_solutions:
         prompt_dict[sample[0].split('\nAnswer: ')[0]].append(sample)
-    new_prompt_dict=generate_new_dict(prompt_dict, is_sol)
+    new_prompt_dict, acc = generate_new_dict(prompt_dict, is_sol)
     if len(new_prompt_dict)==0:
-        return False
+        return False, acc
+    print(new_prompt_dict)
     data = defaultdict(lambda: defaultdict(list))
     for key, value in new_prompt_dict.items():
         prompt=key+'\nAnswer: '
@@ -89,10 +90,10 @@ def get_online_batch(model, tokenizer, initial_batch, temp):
         data[prompt]['pairs'].append((n_responses, n_responses + 1))
         data[prompt]['responses'].extend(responses)
         data[prompt]['sft_target'] = chosen
-        
-    batch_it=get_batch_iterator_dataset(data, tokenizer,batch_size=min(len(data),batch_prompt_tokens.shape[0]), max_length=2048,max_prompt_length=512,n_examples=len(data))
+    
+    batch_it=get_batch_iterator_dataset(data, tokenizer,batch_size=min(len(data),batch_prompt_tokens.shape[0]), max_length=max_length, max_prompt_length=512,n_examples=len(data))
     batch_list = list(batch_it)
-    return batch_list[0]
+    return batch_list[0], acc
 
 def dpo_loss(policy_chosen_logps: torch.FloatTensor,
              policy_rejected_logps: torch.FloatTensor,
@@ -268,7 +269,9 @@ class BasicTrainer(object):
 
         if loss_config.name == 'dpo':
             if loss_config.is_online:
-                batch=get_online_batch(self.policy, self.tokenizer, batch, loss_config.temp)
+                with torch.no_grad():
+                    batch, acc = get_online_batch(self.policy, self.tokenizer, batch, loss_config.temp)
+                metrics['batch_acc'] = [acc]
                 if not batch: return .69, metrics
                 
             policy_chosen_logps, policy_rejected_logps = self.concatenated_forward(self.policy, batch)
@@ -403,7 +406,7 @@ class BasicTrainer(object):
                 global_microbatch = slice_and_move_batch_for_device(batch, microbatch_idx, self.config.gradient_accumulation_steps, self.rank)
                 local_microbatch = slice_and_move_batch_for_device(global_microbatch, self.rank, self.world_size, self.rank)
                 loss, metrics = self.get_batch_metrics(local_microbatch, self.config.loss, train=True)
-                if len(metrics)==0:
+                if len(metrics)<=1:
                     batch_metrics['example_proportion'].append(0)
                     continue
                 else:
@@ -433,7 +436,10 @@ class BasicTrainer(object):
                 rank0_print(f'train stats after {self.example_counter} examples: {formatted_dict(mean_train_metrics)}')
                 if self.config.loss.adjust_temp:
                     if mean_train_metrics['example_proportion']<.7:
-                        self.config.loss.temp+=.1
+                        if mean_train_metrics['batch_acc']<.2:
+                            self.config.loss.temp-=.1
+                        elif mean_train_metrics['batch_acc']>.6:
+                            self.config.loss.temp+=.1
                         print(f'Changing temp to {self.config.loss.temp}')
 
                 if self.config.wandb.enabled and self.rank == 0:
