@@ -56,8 +56,7 @@ def generate_new_dict(old_dict, boolean_func):
 # for each prompt in batch_init, generate 4 outputs from model
 # if there is one good and one bad output, add this prompt and the outputs to return
 # once there are at least batch_size examples to return, return the batch
-def get_online_batch(model, tokenizer, initial_batch, temp, max_length=1024):
-    repeat_num=4
+def get_online_batch(model, tokenizer, initial_batch, temp, max_length=1024, repeat_num=4):
     batch_prompt_tokens=initial_batch['prompt_input_ids']
     batch_attention_mask=initial_batch['prompt_attention_mask']
     prompt_tokens=batch_prompt_tokens.repeat_interleave(repeat_num,dim=0)
@@ -270,7 +269,7 @@ class BasicTrainer(object):
         if loss_config.name == 'dpo':
             if loss_config.is_online:
                 with torch.no_grad():
-                    batch, acc = get_online_batch(self.policy, self.tokenizer, batch, loss_config.temp)
+                    batch, acc = get_online_batch(self.policy, self.tokenizer, batch, loss_config.temp, 1024, loss_config.repeat_num)
                 metrics['batch_acc'] = [acc]
                 if not batch: return .69, metrics
                 
@@ -336,6 +335,9 @@ class BasicTrainer(object):
         for batch in self.train_iterator:
             #### BEGIN EVALUATION ####
             if self.example_counter % self.config.eval_every == 0 and (self.example_counter > 0 or self.config.do_first_eval):
+                if self.config.lora.enabled:
+                    output_dir = os.path.join(self.run_dir, f'step-{self.example_counter}')
+                    self.policy.save_pretrained(output_dir)
                 rank0_print(f'Running evaluation after {self.example_counter} train examples')
                 self.policy.eval()
 
@@ -392,8 +394,6 @@ class BasicTrainer(object):
                         output_dir = os.path.join(self.run_dir, f'step-{self.example_counter}')
                         rank0_print(f'creating checkpoint to write to {output_dir}...')
                         self.save(output_dir, mean_eval_metrics)
-                        if self.config.lora.enabled:
-                            self.policy.save_pretrained(output_dir)
                             
             #### END EVALUATION ####
 
@@ -436,11 +436,12 @@ class BasicTrainer(object):
                 rank0_print(f'train stats after {self.example_counter} examples: {formatted_dict(mean_train_metrics)}')
                 if self.config.loss.adjust_temp:
                     if mean_train_metrics['example_proportion']<.7:
+                        self.config.loss.repeat_num+=1
                         if mean_train_metrics['batch_acc']<.2:
                             self.config.loss.temp-=.1
                         elif mean_train_metrics['batch_acc']>.6:
-                            self.config.loss.temp+=.1
-                        print(f'Changing temp to {self.config.loss.temp}')
+                            self.config.loss.temp+=.05
+                        print(f'Changing temp to {self.config.loss.temp} and changing repeat_num to {self.config.loss.repeat_num}')
 
                 if self.config.wandb.enabled and self.rank == 0:
                     wandb.log(mean_train_metrics, step=self.example_counter)
