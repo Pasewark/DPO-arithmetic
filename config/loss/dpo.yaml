@@ -10,6 +10,8 @@ reference_free: false
 
 is_online: false
 
-temp: .9
+temp: 1.1
 
 adjust_temp: true
+
+repeat_num: 4
