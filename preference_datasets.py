@@ -223,6 +223,56 @@ def get_noisy_arithmetic_dpo(silent=False):
         
     return data
 
+def process_of_addition(num1, num2):
+    num1_str, num2_str = str(num1), str(num2)
+    max_len = max(len(num1_str), len(num2_str))
+
+    # Adding leading zeros to make both numbers of equal length
+    num1_str = num1_str.zfill(max_len)
+    num2_str = num2_str.zfill(max_len)
+
+    carry = 0
+    current_sum = ''  # Initialize as an empty string
+    result = []  # Initial state
+
+    for i in range(max_len - 1, -1, -1):  # From rightmost digit to leftmost
+        temp_sum = int(num1_str[i]) + int(num2_str[i]) + carry
+        carry = 1 if temp_sum >= 10 else 0  # Update carry
+
+        # Update current sum as a string, adding a new digit to the end
+        current_sum = str(temp_sum % 10) + current_sum
+
+        # Add the current state to the result
+        result.append([str(max_len - i), str(carry), current_sum.zfill(max_len - i)])
+
+    return result
+
+def get_outputs(num1, num2):
+    ls=process_of_addition(num1, num2)
+    template='index {}, carry {}, current {}'
+    ret_ls=[template.format(*out) for out in ls]
+    ret='\n'.join(ret_ls)+'\nFinal: '+str(num1+num2)
+    return ret
+
+def get_arithmetic_sequential_state(silent=False, num_examples=500000):
+    print(f'Loading sft arithmetic dataset from Huggingface...')
+    dataset = datasets.load_dataset("tiedong/goat",split='train')
+    print('done')
+    dataset=dataset.shuffle()
+    data = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(tqdm.tqdm(dataset, desc='Processing sft arithmetic', disable=silent)):
+        if i >= num_examples:
+            break
+        nums = row['input'].split(' ')
+        num1, num2 = int(nums[0]),int(nums[-1])
+        outputs = get_outputs(num1, num2)
+        prompt = row['instruction'] + '\nAnswer: '
+        #data[prompt]['sft_target'] = row['output']
+        data[prompt]['sft_target'] = outputs
+        
+    assert len(data)<=num_examples
+    return data
+
 
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
     """Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'."""
@@ -240,6 +290,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_noisy_arithmetic_sft()
     elif name == 'noisy_arithmetic_dpo':
         data = get_noisy_arithmetic_dpo()
+    elif name == 'arithmetic_sequential_state':
+        data = get_arithmetic_sequential_state()
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
