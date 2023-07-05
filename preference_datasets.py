@@ -255,8 +255,8 @@ def get_outputs(num1, num2):
     return ret
 
 def get_arithmetic_sequential_state(silent=False, num_examples=500000):
-    print(f'Loading sft arithmetic dataset from Huggingface...')
-    dataset = datasets.load_dataset("tiedong/goat",split='train')
+    print(f'Loading sequential arithmetic dataset from Huggingface...')
+    dataset = datasets.load_dataset("eric-math123/instruct_addition",split='train')
     print('done')
     dataset=dataset.shuffle()
     data = defaultdict(lambda: defaultdict(list))
@@ -273,7 +273,22 @@ def get_arithmetic_sequential_state(silent=False, num_examples=500000):
     assert len(data)<=num_examples
     return data
 
-
+def get_arithmetic_recursive(silent=False,num_examples=15000):
+    print(f'Loading recursive arithmetic dataset from Huggingface...')
+    dataset = datasets.load_dataset("eric-math123/recursive_add_split",split='train')
+    print('done')
+    # take out shuffling because small digit examples never seen since they are duplicates
+    #dataset=dataset.shuffle()
+    data = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(tqdm.tqdm(dataset, desc='Processing recursive arithmetic', disable=silent)):
+        if i >= num_examples:
+            break
+        prompt = row['input']
+        data[prompt]['sft_target'] = row['output']
+        
+    assert len(data)<=num_examples
+    return data
+    
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
     """Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'."""
     if name == 'shp':
@@ -292,6 +307,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_noisy_arithmetic_dpo()
     elif name == 'arithmetic_sequential_state':
         data = get_arithmetic_sequential_state()
+    elif name == 'arithmetic_recursive':
+        data = get_arithmetic_recursive()
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
