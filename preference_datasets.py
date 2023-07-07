@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup, NavigableString
 import numpy as np
 from typing import Dict, List, Optional, Iterator, Callable, Union, Tuple
 import pickle
+import json
 
 
 def extract_anthropic_prompt(prompt_and_response):
@@ -288,6 +289,15 @@ def get_arithmetic_recursive(silent=False,num_examples=15000):
         
     assert len(data)<=num_examples
     return data
+
+def get_dp_recursive(silent=False):
+    with open('recursive_dp'+'.json',"rb") as test_file:
+        dataset = json.load(test_file)
+    data = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(tqdm.tqdm(dataset, desc=f'Processing dp recursive', disable=silent)):
+        prompt = row['input']
+        data[prompt]['sft_target'] = row['output']
+    return data
     
 def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = None):
     """Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'."""
@@ -309,6 +319,8 @@ def get_dataset(name: str, split: str, silent: bool = False, cache_dir: str = No
         data = get_arithmetic_sequential_state()
     elif name == 'arithmetic_recursive':
         data = get_arithmetic_recursive()
+    elif name == 'dp_recursive':
+        data = get_dp_recursive()
     else:
         raise ValueError(f"Unknown dataset '{name}'")
 
@@ -462,7 +474,12 @@ def get_batch_iterator(names: List[str],
         for name in names:
             truncation_mode = 'keep_end' if name == 'hh' else 'keep_start'
             for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir).items():
-                flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
+                #if len(data['sft_target'])<5:
+                if data['sft_target'][-3]=='[':
+                    print(prompt)
+                    flat_data.extend([(prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode)]*15)
+                else:
+                    flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
 
     collate_fn = get_collate_fn(tokenizer)
 
