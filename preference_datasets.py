@@ -475,7 +475,7 @@ def get_batch_iterator(names: List[str],
             truncation_mode = 'keep_end' if name == 'hh' else 'keep_start'
             for prompt, data in get_dataset(name, split, silent=silent, cache_dir=cache_dir).items():
                 #if len(data['sft_target'])<5:
-                if data['sft_target'][-3]=='[':
+                if '[' in data['sft_target'][-5:]:
                     print(prompt)
                     flat_data.extend([(prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode)]*15)
                 else:
