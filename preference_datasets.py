@@ -477,7 +477,7 @@ def get_batch_iterator(names: List[str],
                 #if len(data['sft_target'])<5:
                 if '[' in data['sft_target'][-5:]:
                     print(prompt)
-                    flat_data.extend([(prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode)]*15)
+                    flat_data.extend([(prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode)]*50)
                 else:
                     flat_data.append((prompt, data['responses'], data['pairs'], data['sft_target'], truncation_mode))
 
